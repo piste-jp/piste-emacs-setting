@@ -2,3 +2,8 @@ url
 elpa
 secret.el
 .org-id-locations
+session.*
+*.elc
+eln-cache/
+auto-save-list/
+tree-sitter/

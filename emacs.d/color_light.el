@@ -45,6 +45,11 @@
 (set-foreground-color color-fg)
 (set-background-color color-bg)
 
+;; line number
+(setq color-fg-line        foreground-light)
+(setq color-bg-line        color_karekusairo)
+(setq color-fg-line-active color_budouiro)
+
 ;; minibuffer
 (setq color-fg-minibuffer-prompt foreground-light)
 (setq color-bg-minibuffer-prompt background-light)
