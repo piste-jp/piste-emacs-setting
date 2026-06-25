@@ -9,7 +9,8 @@
 ;; Launch server mode
 (require 'server)
 (eval-when-compile (require 'server))
-(when (and (functionp 'server-running-p);           (not (server-running-p)))
+(when (and (functionp 'server-running-p)
+           (not (server-running-p)))
   (server-start))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -191,7 +192,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Enable Clipboard
-(setq x-select-enable-clipboard t)
+(setq select-enable-clipboard t)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Font setting on X
@@ -359,7 +360,7 @@
 
 ;; garbage correction setting
 (setq gc-cons-threshold 40000000)
-(setq garbage-collection-messages t) ;; Print garbage correction message
+(setq garbage-collection-messages nil) ;; Print garbage correction message
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; debug/error
@@ -470,7 +471,7 @@
     ;; (mark-whole-buffer)
     ;; (tabify (region-beginning) (region-end))
     ))
-(add-hook 'write-file-hooks 'my-trim-buffer)
+(add-hook 'before-save-hook 'my-trim-buffer)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;  Delete empty file
@@ -529,7 +530,7 @@
 
 (define-minor-mode visible-mark-mode
   "A mode to make the mark visible."
-  nil nil nil
+  :init-value nil :lighter nil :keymap nil
   :group 'visible-mark
   (if visible-mark-mode
       (unless visible-mark-overlay
@@ -643,7 +644,7 @@
 
 ;;(mapc
 ;; (lambda (hook)
-;;   (add-hook hook '(lambda () (flyspell-mode 1))))
+;;   (add-hook hook #'(lambda () (flyspell-mode 1))))
 ;; '(
 ;;   fundamental-mode-hook
 ;;   text-mode-hook
@@ -764,7 +765,8 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
     (setenv "PATH" path-from-shell)
     (setq exec-path (split-string path-from-shell path-separator))))
 
-(set-exec-path-from-shell-PATH)
+(when (eq system-type 'darwin)
+  (set-exec-path-from-shell-PATH))
 
 ;(setenv "PATH" (concat "/Library/TeX/texbin" (getenv "PATH")))
 ;(setq exec-path (append '("/Library/TeX/texbin") exec-path))
@@ -773,8 +775,9 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 (global-set-key "\C-cl" 'org-store-link)
 (global-set-key "\C-cc" 'org-capture)
 (global-set-key "\C-ca" 'org-agenda)
-(global-set-key "\C-cb" 'org-iswitchb)
-(global-set-key "\C-cr" 'org-remember)
+(global-set-key "\C-cb" 'org-switchb)
+;; org-remember was removed from org; use org-capture (C-c c) instead.
+;(global-set-key "\C-cr" 'org-remember)
 
 ;; Automode alias
 (add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
@@ -793,7 +796,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 (setq org-agenda-files '("~/org"))
 
 ;; Use underline in agenda
-(add-hook 'org-agenda-mode-hook '(lambda () (hl-line-mode 1)))
+(add-hook 'org-agenda-mode-hook #'(lambda () (hl-line-mode 1)))
 (setq hl-line-face 'underline)
 
 ;; Do not use holiday in agenda
@@ -807,9 +810,10 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 (setq org-log-done 'time)
 
 ;; org-mode templates
-(setq org-remember-templates
-      '(("Note" ?n "* %?\n  %i\n  %a" nil "Tasks")
-        ("Todo" ?t "* TODO %?\n  %i\n  %a" nil "Tasks")))
+;; org-remember-templates is obsolete; superseded by org-capture-templates below.
+;(setq org-remember-templates
+;      '(("Note" ?n "* %?\n  %i\n  %a" nil "Tasks")
+;        ("Todo" ?t "* TODO %?\n  %i\n  %a" nil "Tasks")))
 
 (setq org-capture-templates
       '(("l" "Project(LTFS)" entry (file+headline "~/org/projects.org" "LTFS project")
@@ -989,21 +993,21 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 
 ;;(setq indent-tabs-mode nil)
 
-;(add-hook 'c-mode-hook '(lambda () (font-lock-mode)))
-;(add-hook 'c++-mode-hook '(lambda () (font-lock-mode)))
-;(add-hook 'objc-mode-hook '(lambda () (font-lock-mode)))
-;(add-hook 'java-mode-hook '(lambda () (font-lock-mode)))
-;(add-hook 'emacs-lisp-mode-hook '(lambda () (font-lock-mode)))
-;(add-hook 'html-helper-mode-hook '(lambda () (font-lock-mode)))
-;(add-hook 'dired-mode-hook '(lambda () (font-lock-mode)))
-;(add-hook 'sh-mode-hook '(lambda () (font-lock-mode)))
+;(add-hook 'c-mode-hook #'(lambda () (font-lock-mode)))
+;(add-hook 'c++-mode-hook #'(lambda () (font-lock-mode)))
+;(add-hook 'objc-mode-hook #'(lambda () (font-lock-mode)))
+;(add-hook 'java-mode-hook #'(lambda () (font-lock-mode)))
+;(add-hook 'emacs-lisp-mode-hook #'(lambda () (font-lock-mode)))
+;(add-hook 'html-helper-mode-hook #'(lambda () (font-lock-mode)))
+;(add-hook 'dired-mode-hook #'(lambda () (font-lock-mode)))
+;(add-hook 'sh-mode-hook #'(lambda () (font-lock-mode)))
 
 ;(require 'hi-lock)
 ;(global-hi-lock-mode t)
 ;(setq hi-lock-file-patterns-policy t)
 
 (add-hook 'c-mode-common-hook
-          '(lambda ()
+          #'(lambda ()
              ; Fixed Setting for LTFS devlopment (Do not change!!!)
              (setq font-lock-keywords c-font-lock-keywords-2)
              (c-set-style "bsd")
@@ -1043,7 +1047,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
           )
 
 (add-hook 'c++-mode-hook
-          '(lambda ()
+          #'(lambda ()
              ; Fixed Setting for LTFS devlopment (Do not change!!!)
              (setq font-lock-keywords c++-font-lock-keywords-2)
              (c-set-style "bsd")
@@ -1080,7 +1084,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
        auto-mode-alist))
 
 (add-hook 'perl-mode-hook
-          '(lambda ()
+          #'(lambda ()
              ;(setq c-tab-always-indent t)
              (setq default-tab-width 4)
              (setq tab-width 4)
@@ -1100,7 +1104,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
           )
 
 (add-hook 'python-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (setq indent-tabs-mode nil)
              (setq indent-level 4)
              ;(setq default-tab-width 3)
@@ -1109,7 +1113,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
              ;(setq tab-stop-list
              ;      '(3 6 9 12 15 18 21 24 27 30 33 36 39 42 45))
              (setq tab-width 4)
-             (setq python-indent 4)
+             (setq python-indent-offset 4)
              ;(setq tab-stop-list
              ;      '(4 8 12 16 20 24 28 32 36 40 44 48 52 56 60))
              (gtags-mode)
@@ -1125,7 +1129,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 (add-to-list 'auto-mode-alist '("\\.json$" . python-mode))
 
 (add-hook 'sh-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (setq default-tab-width 4)
              (setq tab-width 4)
              (setq indent-tabs-mode nil)
@@ -1139,7 +1143,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
           )
 
 (add-hook 'sgml-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (setq default-tab-width 4)
              (setq tab-width 4)
              (setq indent-tabs-mode nil)
@@ -1153,7 +1157,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
           )
 
 (add-hook 'emacs-lisp-mode-hook
-          '(lambda ()
+          #'(lambda ()
             (setq indent-tabs-mode nil)
             (ruler-mode)
             (set-fill-column 120)
@@ -1163,7 +1167,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
           )
 
 (add-hook 'text-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (setq indent-tabs-mode t)
              (ruler-mode)
              (set-fill-column 120)
@@ -1173,7 +1177,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
           )
 
 (add-hook 'fundamental-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (setq indent-tabs-mode t)
              (ruler-mode)
              (set-fill-column 120)
@@ -1183,7 +1187,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
           )
 
 (add-hook 'org-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (setq indent-tabs-mode nil)
              (setq truncate-lines t)
              (setq truncate-partial-width-windows t)
@@ -1203,7 +1207,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 ;; Settings for Tag Jump by gtags-mode
 (autoload 'gtags-mode "gtags" "" t)
 (setq gtags-mode-hook
-      '(lambda ()
+      #'(lambda ()
          (local-set-key "\M-t" 'gtags-find-tag)
          (local-set-key "\M-r" 'gtags-find-rtag)
          (local-set-key "\M-s" 'gtags-find-symbol)
