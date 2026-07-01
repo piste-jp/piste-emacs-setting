@@ -55,7 +55,11 @@
   (setq ratina nil)
   )
 
-(if window-system
+;; NOTE: daemon (emacs --daemon) では init 実行時にフレームがまだ無く
+;; `window-system' は nil になる。だが後で emacsclient -c が作るのは GUI
+;; フレームなので、ここは (display-graphic-p) だけでなく (daemonp) も真として
+;; truecolor パレットを読む。純ターミナル(emacs -nw)のときだけ term256。
+(if (or (display-graphic-p) (daemonp))
   ;; GUI color setting
   (if (string= theme "Dark")
       (progn
@@ -179,7 +183,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; linum setting
-(unless window-system
+(unless (or (display-graphic-p) (daemonp))
   (add-hook 'linum-before-numbering-hook
             (lambda ()
               (setq-local linum-format-fmt
@@ -192,7 +196,7 @@
    (propertize (format linum-format-fmt line) 'face 'linum)
    (propertize " " 'face 'mode-line)))
 
-(unless window-system
+(unless (or (display-graphic-p) (daemonp))
   (setq linum-format 'linum-format-func))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -213,8 +217,22 @@
       (if (>= (x-display-pixel-width) 3000) '(height . 80) '(height . 60))
     (if (>= (x-display-pixel-width) 1900) '(height . 80) '(height . 60))))
 
-(if window-system
-    (progn
+;; フォント・フレームサイズ・スクロールバー・前景/背景色といった「表示(グラフィ
+;; カル)フレームが存在して初めて意味を持つ設定」をここにまとめる。GUI 直接起動な
+;; ら起動時に即実行、daemon なら emacsclient -c が最初の GUI フレームを作った時に
+;; `server-after-make-frame-hook' から一度だけ呼ばれる(末尾のディスパッチ参照)。
+;; こうしないと daemon 側は init 実行時に window-system=nil のためこの塊が丸ごと
+;; スキップされ、フォント/サイズ/色が GUI 直接起動と食い違う。
+(defvar my/graphic-frame-configured nil
+  "グラフィカルフレーム用の一度きり設定が済んだかどうか。")
+
+(defun my/setup-graphic-frame (&optional frame)
+  "FRAME(既定は選択フレーム)がグラフィカルなら表示系設定を一度だけ適用する。"
+  (let ((frame (or frame (selected-frame))))
+    (when (and (display-graphic-p frame)
+               (not my/graphic-frame-configured))
+      (setq my/graphic-frame-configured t)
+      (with-selected-frame frame
      (if (eq system-type 'darwin)
          (setq mac-allow-anti-aliasing t)      ;; turn on anti-aliasing (default)
        ;;(setq mac-allow-anti-aliasing nil)  ;; turn off anti-aliasing
@@ -301,9 +319,30 @@
                     )
                    initial-frame-alist))
 
+     ;; 2 枚目以降の GUI フレーム(別の emacsclient -c)にも色が乗るよう、
+     ;; 前景/背景色も default-frame-alist に含めておく。
+     (setq initial-frame-alist
+           (append (list (cons 'foreground-color color-fg)
+                         (cons 'background-color color-bg))
+                   initial-frame-alist))
      (setq default-frame-alist initial-frame-alist)
-     )
-  )
+
+     ;; default-frame-alist は「これから作られるフレーム」にしか効かない。
+     ;; daemon の場合 emacsclient -c のフレームは既に生成済みなので、この場で
+     ;; サイズ・スクロールバー・前景/背景色を直接反映して GUI 直接起動と揃える。
+     (modify-frame-parameters frame (list (calc-width) (calc-height)))
+     (set-scroll-bar-mode 'right)
+     (set-foreground-color color-fg)
+     (set-background-color color-bg)
+     ))))
+
+;; グラフィカルフレームが出来たら一度だけ設定を適用する。
+;;   - 非 daemon (emacs / emacs -nw): init 時点のフレームで判定して即実行
+;;   - daemon: 最初の emacsclient フレーム生成時に server-after-make-frame-hook
+;;             から呼ぶ(GUI フレームでなければ設定せず、GUI が来るまで待つ)
+(if (daemonp)
+    (add-hook 'server-after-make-frame-hook #'my/setup-graphic-frame)
+  (my/setup-graphic-frame))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Setting of Anthy
@@ -339,9 +378,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Scroll bar setting
-(if window-system
-    (set-scroll-bar-mode 'right)
-  )
+;; スクロールバーは `my/setup-graphic-frame' 内(グラフィカルフレーム確定後)で
+;; 設定する。daemon 起動時は window-system=nil でここが素通りしてしまうため。
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Startup setting
@@ -584,7 +622,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Highlighting yanked region
-(when window-system
+(when (or (display-graphic-p) (daemonp))
   (defadvice yank (after ys:highlight-string activate)
     (let ((ol (make-overlay (mark t) (point))))
       (overlay-put ol 'face 'highlight)
