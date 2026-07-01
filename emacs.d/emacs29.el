@@ -31,6 +31,7 @@
       '(("melpa" . "https://melpa.org/packages/")
         ;; ("melpa-stable" . "https://stable.melpa.org/packages/")
         ("org" . "https://orgmode.org/elpa/")
+        ("nongnu" . "https://elpa.nongnu.org/nongnu/")
         ("gnu" . "https://elpa.gnu.org/packages/")))
 
 (package-initialize)
@@ -77,6 +78,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Load personal secrets
 (load (expand-file-name "~/.emacs.d/secret.el") nil t nil)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Load personal (non-public / work-specific) settings if present
+(load (expand-file-name "~/.emacs.d/personal.el") t t nil)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Character code setting
@@ -616,6 +621,11 @@
 (add-to-list 'tramp-remote-process-environment
              "HISTFILE=/dev/null")
 
+;; Honor the dev container's own PATH so remote eglot/company can find
+;; language servers installed inside it (pyright, clangd, ruff, ...).
+(with-eval-after-load 'tramp
+  (add-to-list 'tramp-remote-path 'tramp-own-remote-path))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; company mode
 (require 'company)
@@ -637,6 +647,40 @@
   (lambda ()
     (when (file-remote-p default-directory)
       (set (make-local-variable 'company-clang-executable) "clang"))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; eglot (LSP) -- opt-in.  When the buffer is on a TRAMP /docker: path eglot
+;; starts the language server INSIDE the dev container.  Run M-x eglot in a
+;; Python or C/C++ buffer.  global+gtags stays as the always-on layer.
+(with-eval-after-load 'eglot
+  ;; Python -> pyright (lives in the openpilot venv, so imports resolve)
+  (add-to-list 'eglot-server-programs
+               '((python-mode python-ts-mode)
+                 . ("pyright-langserver" "--stdio")))
+  ;; C/C++ -> clangd
+  (add-to-list 'eglot-server-programs
+               '((c-mode c-ts-mode c++-mode c++-ts-mode) . ("clangd"))))
+
+;; Feed eglot's completions into company (the existing completion UI).
+(add-hook 'eglot-managed-mode-hook
+          (lambda ()
+            (company-mode 1)
+            (add-to-list (make-local-variable 'company-backends) 'company-capf)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Indentation -- project-agnostic, detection based.
+;;   editorconfig : .editorconfig を持つプロジェクトはそれを尊重
+;;   dtrt-indent  : .editorconfig が無いリポジトリは各ファイルの実インデントを
+;;                  自動検出して追従 (kernel=tab/8, ansible=space/2 等)
+;; プロジェクト固有のタブ強制リストは personal.el 側に置く。
+(use-package editorconfig            ;; Emacs 29 は ELPA から導入
+  :ensure t
+  :config (editorconfig-mode 1))
+(use-package dtrt-indent
+  :ensure t
+  :config (dtrt-indent-global-mode 1))
+;; 検出材料の無い新規ファイル用のデフォルト (既存ファイルは上2つが上書き)
+(setq-default indent-tabs-mode nil)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Settings for spell check
@@ -1026,18 +1070,9 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 
 (add-hook 'c-mode-common-hook
           #'(lambda ()
-             ; Fixed Setting for LTFS devlopment (Do not change!!!)
+             ;; インデント(タブ/スペース・幅・style)は editorconfig + dtrt-indent
+             ;; + personal.el のプロジェクト別設定が管理する。ここは表示系のみ。
              (setq font-lock-keywords c-font-lock-keywords-2)
-             (c-set-style "bsd")
-             (c-set-offset 'case-label        '+)
-             (c-set-offset 'comment-intro     0)
-             (c-set-offset 'inextern-lang     0)
-             (setq c-basic-offset 4)
-             (setq default-tab-width 4)
-             (setq tab-width 4)
-             (setq indent-tabs-mode t)
-             (setq tab-stop-list
-                   '(4 8 12 16 20 24 28 32 36 40 44 48 52 56 60))
              ; User Preference
              (setq c-tab-always-indent 10)
              ;(setq-local company-backends
@@ -1066,21 +1101,8 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 
 (add-hook 'c++-mode-hook
           #'(lambda ()
-             ; Fixed Setting for LTFS devlopment (Do not change!!!)
+             ;; インデントは editorconfig + dtrt-indent + personal.el が管理。表示系のみ残す。
              (setq font-lock-keywords c++-font-lock-keywords-2)
-             (c-set-style "bsd")
-             (c-set-offset 'inaccess          0)
-             (c-set-offset 'access-label      '-)
-             (c-set-offset 'innamespace       '-)
-             (c-set-offset 'case-label        '+)
-             (c-set-offset 'comment-intro     0)
-             (c-set-offset 'inextern-lang     0)
-             (setq c-basic-offset 4)
-             (setq default-tab-width 4)
-             (setq tab-width 4)
-             (setq indent-tabs-mode t)
-             (setq tab-stop-list
-                   '(4 8 12 16 20 24 28 32 36 40 44 48 52 56 60))
              ; User Preference
              (font-lock-add-keywords nil
                                      '(
@@ -1322,6 +1344,119 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 (use-package grip-mode
   :ensure t
   :hook ((markdown-mode org-mode) . grip-mode))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; vterm + Claude Code ランチャ
+;;
+;; Claude の TUI は本物の libvterm を使う vterm でないと正しく描画できない。
+;; 検証結果: eat(純 elisp) は claude のエスケープ列で emacs 全体が固まり、内蔵
+;; term.el は動くが画面が崩れた。vterm のみ OK(要ビルド: cmake + libvterm-dev)。
+;; eat はビルド不要の汎用端末として残してあるが、claude には使わない。
+;;
+;; vterm は `/bin/sh -c "stty …; exec <vterm-shell>"' で `vterm-shell' を起動する
+;; (:connection-type 'pty)。よって `vterm-shell' にコマンド全体を入れればよい。
+(setq vterm-always-compile-module t)   ; 初回ロード時にモジュールを無確認でコンパイル
+(use-package vterm
+  :ensure t
+  :commands (vterm vterm-other-window my/claude))
+(use-package eat
+  :ensure t
+  :commands (eat eat-make))
+
+(defvar my/claude-program
+  ;; `claude' は多くの環境で PATH 上の実行ファイルではなく ~/.bashrc の alias
+  ;; として定義されている。my/claude は `bash -lc "exec …"' で起動するが、
+  ;;   (1) 非対話シェルなので .bashrc の alias 定義自体が読まれない、
+  ;;   (2) 仮に対話(-i)でも `exec' の引数は alias 展開されない、
+  ;; ため "claude" のままだと command not found で即終了する。標準のローカル
+  ;; インストール先の実体を直接指す。無ければ従来どおり "claude" にフォールバック。
+  (let ((local (expand-file-name "~/.claude/local/claude")))
+    (if (file-exists-p local) local "claude"))
+  "Claude Code を起動するコマンド。引数を含めてもよい。")
+
+(defun my/claude (&optional new)
+  "現在のプロジェクト(無ければ default-directory)を起点に vterm で Claude を起動。
+ローカルはもちろん /ssh: バッファでも vterm が remote 実行する。コンテナは
+TRAMP より `docker exec' 直結が安定なので `my/openpilot-claude' を使う。前置
+引数 NEW で別セッション。ログインシェル(bash -lc)経由で PATH(nvm/.local)を通す。"
+  (interactive "P")
+  (require 'vterm)
+  (let* ((root (or (and (fboundp 'project-current)
+                        (let ((pr (project-current nil)))
+                          (and pr (project-root pr))))
+                   default-directory))
+         (default-directory root)
+         (host (or (file-remote-p root 'host) "local"))
+         (vterm-shell (concat "bash -lc "
+                              (shell-quote-argument
+                               (concat "exec " my/claude-program))))
+         (vterm-buffer-name (if new
+                                (format "*claude:%s:%s*" host
+                                        (abbreviate-file-name root))
+                              (format "*claude:%s*" host))))
+    (vterm vterm-buffer-name)))
+
+;; vterm での日本語・長文入力(mozc コンポーズバッファ)
+;;   vterm はバッファが read-only で、マイナーモード型 IME である mozc.el は確定
+;;   文字をバッファに insert するため inline では使えない(Buffer is read-only)。
+;;   回避策: 別バッファ(普通の編集バッファなので mozc が inline で効く)で和文・
+;;   複数行を自由に編集し、C-c C-c で全文を vterm へ bracketed paste 送信する
+;;   (改行ごとに送信されず 1 メッセージとして claude に渡る)。vterm で C-c C-j。
+(defvar-local my/vterm--compose-target nil
+  "コンポーズバッファの送信先 vterm バッファ。")
+
+(defun my/vterm-compose ()
+  "別バッファで(mozc inline・複数行で)端末へ送る文章を編集する。
+編集バッファでは mozc がそのまま inline で使え、長文・複数行も書ける。
+C-c C-c で全文を元の vterm へ bracketed paste 送信(改行で勝手に確定しない)、
+C-c C-k で破棄。送信後は元の vterm に戻るので、内容を確認して RET で実行する。"
+  (interactive)
+  (let ((target (current-buffer))
+        (buf (get-buffer-create "*vterm-compose*")))
+    (with-current-buffer buf
+      (erase-buffer)
+      (text-mode)
+      (setq my/vterm--compose-target target)
+      (when default-input-method
+        (activate-input-method default-input-method))
+      (local-set-key (kbd "C-c C-c") #'my/vterm-compose-send)
+      (local-set-key (kbd "C-c C-k") #'my/vterm-compose-abort)
+      (setq header-line-format
+            "C-c C-c: 送信   C-c C-k: 破棄   (s-SPC で和英切替)"))
+    (pop-to-buffer buf)))
+
+(defun my/vterm-compose-send ()
+  "コンポーズバッファの全文を送信先 vterm へ送る(bracketed paste)。"
+  (interactive)
+  (let ((target my/vterm--compose-target)
+        (text (buffer-string)))
+    (when (buffer-live-p target)
+      (with-current-buffer target
+        (vterm-send-string text t)))   ; t = bracketed paste(複数行まとめて)
+    (quit-window t)))
+
+(defun my/vterm-compose-abort ()
+  "コンポーズバッファを破棄する。"
+  (interactive)
+  (quit-window t))
+
+(defun my/vterm--guard-input-method ()
+  "vterm バッファで IME が ON にされたら即 OFF に戻す安全網。
+read-only で詰むのを防ぐ。和文入力は C-c C-j / s-SPC のコンポーズを使う。"
+  (when (derived-mode-p 'vterm-mode)
+    (deactivate-input-method)
+    (message "vterm では IME を直接使えません。C-c C-j か s-SPC でコンポーズを開いてください。")))
+
+(add-hook 'vterm-mode-hook
+          (lambda ()
+            (add-hook 'input-method-activate-hook
+                      #'my/vterm--guard-input-method nil t)))
+
+(with-eval-after-load 'vterm
+  (define-key vterm-mode-map (kbd "C-c C-j") #'my/vterm-compose)
+  ;; vterm 内で IME を ON にすると read-only で詰む。手癖の s-SPC(toggle-input-
+  ;; method)を「IME 切替」ではなく「コンポーズを開く」に割り当てて事故を防ぐ。
+  (define-key vterm-mode-map (kbd "s-SPC") #'my/vterm-compose))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; END OF FILE
