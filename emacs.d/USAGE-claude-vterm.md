@@ -53,6 +53,7 @@ VSCode 不要で devcontainer のライフサイクルを回す。要 `npm i -g 
 | 操作 | コマンド |
 |---|---|
 | カレントプロジェクトの dev container を起動 | `M-x my/devcontainer-up` |
+| コンテナを作り直して起動（Dockerfile 変更後など。--remove-existing-container 付き） | `M-x my/devcontainer-rebuild` |
 | カレントプロジェクトのコンテナ内に vterm シェル（devcontainer exec） | `M-x my/devcontainer-shell` |
 | openpilot を（プロジェクト外からでも）起動 | `M-x my/openpilot-devcontainer-up` |
 | openpilot のコンテナ内に vterm シェル | `M-x my/openpilot-devcontainer-shell` |
