@@ -2,7 +2,7 @@
 ;; Emacs26 Setting File
 ;;                  Written by Atsushi Abe
 ;;
-;; +DATE: 2025/06/28 00:56:36 piste
+;; +DATE: 2026/07/03 00:16:13 piste
 ;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -115,8 +115,14 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Global Setting
-(setq linum-mode t)
-(setq line-number-mode t)
+(global-display-line-numbers-mode)
+(set-face-attribute 'line-number nil
+                    :foreground color-fg-line
+                    :background color-bg-line)
+(set-face-attribute 'line-number-current-line nil
+                    :weight 'bold
+                    :foreground color-fg-line-active)
+
 (setq column-number-mode t)
 (display-time-mode)
 (setq kill-whole-line t)
@@ -262,7 +268,8 @@
 (defun calc-height ()
   (if (eq ratina t)
       (if (>= (x-display-pixel-width) 3000) '(height . 80) '(height . 60))
-    (if (>= (x-display-pixel-width) 1900) '(height . 80) '(height . 60))))
+    (if (>= (x-display-pixel-width) 3000) '(height . 70)
+      (if (>= (x-display-pixel-width) 1900) '(height . 80) '(height . 60)))))
 
 ;; フォント・フレームサイズ・スクロールバー・前景/背景色といった「表示(グラフィ
 ;; カル)フレームが存在して初めて意味を持つ設定」をここにまとめる。GUI 直接起動な
@@ -919,8 +926,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; org-mode setting
-;(require 'org-install)
-(straight-use-package 'org)
+;; org is bundled with Emacs 30; no package install needed.
+(require 'org)
 
 (defun set-exec-path-from-shell-PATH ()
   "Set up Emacs' `exec-path' and PATH environment variable to match that used by the user's shell.

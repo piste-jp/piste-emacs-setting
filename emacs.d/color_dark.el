@@ -46,6 +46,11 @@
 (set-foreground-color color-fg)
 (set-background-color color-bg)
 
+;; line number
+(setq color-fg-line        color_genjinezu)
+(setq color-bg-line        color_kurotsurubami)
+(setq color-fg-line-active color_tankou)
+
 ;; minibuffer
 (setq color-fg-minibuffer-prompt foreground-dark)
 (setq color-bg-minibuffer-prompt background-dark)
