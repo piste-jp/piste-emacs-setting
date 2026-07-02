@@ -2,6 +2,7 @@
 (setq package-archives
       '(("melpa" . "https://melpa.org/packages/")
         ("org" . "https://orgmode.org/elpa/")
+        ("nongnu" . "https://elpa.nongnu.org/nongnu/")
         ("gnu" . "https://elpa.gnu.org/packages/")))
 (package-initialize)
 
@@ -15,6 +16,8 @@
     company-c-headers
     company-org-block
     dash
+    eat
+    flycheck
     go-mode
     grip-mode
     gtags-mode
@@ -27,6 +30,7 @@
     syslog-mode
     use-package
     visible-mark
+    vterm
     tern
     js2-mode
     tern-auto-complete

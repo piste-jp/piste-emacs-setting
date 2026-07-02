@@ -1,9 +1,11 @@
 url
 elpa
 secret.el
+personal.el
 .org-id-locations
 session.*
 *.elc
 eln-cache/
 auto-save-list/
 tree-sitter/
+eshell/

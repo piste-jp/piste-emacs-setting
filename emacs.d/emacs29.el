@@ -223,15 +223,28 @@
 ;; こうしないと daemon 側は init 実行時に window-system=nil のためこの塊が丸ごと
 ;; スキップされ、フォント/サイズ/色が GUI 直接起動と食い違う。
 (defvar my/graphic-frame-configured nil
-  "グラフィカルフレーム用の一度きり設定が済んだかどうか。")
+  "フォント等のグローバルなグラフィカル設定が済んだかどうか。")
+
+(defun my/apply-frame-appearance (frame)
+  "FRAME 個別に効かせる表示設定(サイズ・スクロールバー・前景/背景色)を当てる。
+`default-frame-alist' が WM 都合で無視され、新しい emacsclient フレームが極小に
+なることがあるため、グラフィカルフレームが出来るたびに毎回サイズを当て直す。"
+  (with-selected-frame frame
+    (modify-frame-parameters frame (list (calc-width) (calc-height)))
+    (set-scroll-bar-mode 'right)
+    (set-foreground-color color-fg)
+    (set-background-color color-bg)))
 
 (defun my/setup-graphic-frame (&optional frame)
-  "FRAME(既定は選択フレーム)がグラフィカルなら表示系設定を一度だけ適用する。"
+  "FRAME がグラフィカルなら表示系設定を適用する。
+フォント/フォントセット等のグローバル設定は初回のみ。サイズ・色などフレーム個別に
+効かせる設定は `my/apply-frame-appearance' で毎回当て直す。"
   (let ((frame (or frame (selected-frame))))
-    (when (and (display-graphic-p frame)
-               (not my/graphic-frame-configured))
-      (setq my/graphic-frame-configured t)
-      (with-selected-frame frame
+    (when (display-graphic-p frame)
+      ;; --- グローバル設定(フォント等)は初回のみ ---
+      (unless my/graphic-frame-configured
+        (setq my/graphic-frame-configured t)
+        (with-selected-frame frame
      (if (eq system-type 'darwin)
          (setq mac-allow-anti-aliasing t)      ;; turn on anti-aliasing (default)
        ;;(setq mac-allow-anti-aliasing nil)  ;; turn off anti-aliasing
@@ -306,39 +319,24 @@
            )
        )
 
-     ;; Frame size at start time
-     (message "Point: %d" (calc-point))
-     (message "Width: %s" (calc-width))
-     (message "Height: %s" (calc-height))
-
-     (setq initial-frame-alist
-           (append (list
-                    (calc-width)
-                    (calc-height)
-                    )
-                   initial-frame-alist))
-
-     ;; 2 枚目以降の GUI フレーム(別の emacsclient -c)にも色が乗るよう、
-     ;; 前景/背景色も default-frame-alist に含めておく。
-     (setq initial-frame-alist
-           (append (list (cons 'foreground-color color-fg)
+     ;; これから作られる別フレームにもサイズ・色が乗るよう default-frame-alist へ。
+     ;; (initial-frame-alist は最初の 1 フレーム専用なので daemon では無意味)
+     (setq default-frame-alist
+           (append (list (calc-width)
+                         (calc-height)
+                         (cons 'foreground-color color-fg)
                          (cons 'background-color color-bg))
-                   initial-frame-alist))
-     (setq default-frame-alist initial-frame-alist)
+                   default-frame-alist))))
+      ;; --- フレーム個別設定は毎回当てる ---
+      ;; default-frame-alist が WM 都合で無視され新フレームが極小になることがあるので、
+      ;; グラフィカルフレームが出来るたびにサイズ等を確実に当て直す。
+      (my/apply-frame-appearance frame))))
 
-     ;; default-frame-alist は「これから作られるフレーム」にしか効かない。
-     ;; daemon の場合 emacsclient -c のフレームは既に生成済みなので、この場で
-     ;; サイズ・スクロールバー・前景/背景色を直接反映して GUI 直接起動と揃える。
-     (modify-frame-parameters frame (list (calc-width) (calc-height)))
-     (set-scroll-bar-mode 'right)
-     (set-foreground-color color-fg)
-     (set-background-color color-bg)
-     ))))
-
-;; グラフィカルフレームが出来たら一度だけ設定を適用する。
+;; グラフィカルフレームが出来るたびに表示設定を適用する(グローバル分は初回のみ)。
 ;;   - 非 daemon (emacs / emacs -nw): init 時点のフレームで判定して即実行
-;;   - daemon: 最初の emacsclient フレーム生成時に server-after-make-frame-hook
-;;             から呼ぶ(GUI フレームでなければ設定せず、GUI が来るまで待つ)
+;;   - daemon: emacsclient フレーム生成のたびに server-after-make-frame-hook から
+;;             呼ぶ(GUI フレームでなければ何もしない。毎回呼ぶことで 2 枚目以降の
+;;             フレームにもサイズが確実に当たり、極小フレーム化を防ぐ)
 (if (daemonp)
     (add-hook 'server-after-make-frame-hook #'my/setup-graphic-frame)
   (my/setup-graphic-frame))
@@ -1384,7 +1382,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
   :hook ((markdown-mode org-mode) . grip-mode))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; vterm + Claude Code ランチャ
+;; vterm + Claude Code / Devin CLI ランチャ
 ;;
 ;; Claude の TUI は本物の libvterm を使う vterm でないと正しく描画できない。
 ;; 検証結果: eat(純 elisp) は claude のエスケープ列で emacs 全体が固まり、内蔵
@@ -1396,7 +1394,7 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
 (setq vterm-always-compile-module t)   ; 初回ロード時にモジュールを無確認でコンパイル
 (use-package vterm
   :ensure t
-  :commands (vterm vterm-other-window my/claude))
+  :commands (vterm vterm-other-window my/claude my/devin my/codex))
 (use-package eat
   :ensure t
   :commands (eat eat-make))
@@ -1412,12 +1410,19 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
     (if (file-exists-p local) local "claude"))
   "Claude Code を起動するコマンド。引数を含めてもよい。")
 
-(defun my/claude (&optional new)
-  "現在のプロジェクト(無ければ default-directory)を起点に vterm で Claude を起動。
-ローカルはもちろん /ssh: バッファでも vterm が remote 実行する。コンテナは
-TRAMP より `docker exec' 直結が安定なので `my/openpilot-claude' を使う。前置
-引数 NEW で別セッション。ログインシェル(bash -lc)経由で PATH(nvm/.local)を通す。"
-  (interactive "P")
+(defvar my/devin-program "devin"
+  ;; devin は alias ではなく ~/.local/bin/devin の実体なので、bash -lc の
+  ;; PATH(~/.local/bin)でそのまま見つかる。claude のようなフルパス解決は不要。
+  "Devin CLI を起動するコマンド。引数を含めてもよい。")
+
+(defvar my/codex-program "codex"
+  ;; codex は nvm の node bin(~/.nvm/versions/node/*/bin/codex)にある実体。
+  ;; bash -lc(ログインシェル)が nvm を読み込むので PATH でそのまま見つかる。
+  "Codex CLI を起動するコマンド。引数を含めてもよい。")
+
+(defun my/vterm--ai-launch (program label &optional new)
+  "PROGRAM を vterm で起動する共通部。バッファ名のラベルは LABEL。
+起点は現在のプロジェクト(無ければ default-directory)。NEW で別セッション。"
   (require 'vterm)
   (let* ((root (or (and (fboundp 'project-current)
                         (let ((pr (project-current nil)))
@@ -1427,12 +1432,32 @@ TRAMP より `docker exec' 直結が安定なので `my/openpilot-claude' を使
          (host (or (file-remote-p root 'host) "local"))
          (vterm-shell (concat "bash -lc "
                               (shell-quote-argument
-                               (concat "exec " my/claude-program))))
+                               (concat "exec " program))))
          (vterm-buffer-name (if new
-                                (format "*claude:%s:%s*" host
+                                (format "*%s:%s:%s*" label host
                                         (abbreviate-file-name root))
-                              (format "*claude:%s*" host))))
+                              (format "*%s:%s*" label host))))
     (vterm vterm-buffer-name)))
+
+(defun my/claude (&optional new)
+  "現在のプロジェクト(無ければ default-directory)を起点に vterm で Claude を起動。
+ローカルはもちろん /ssh: バッファでも vterm が remote 実行する。コンテナは
+TRAMP より `docker exec' 直結が安定なので `my/openpilot-claude' を使う。前置
+引数 NEW で別セッション。ログインシェル(bash -lc)経由で PATH(nvm/.local)を通す。"
+  (interactive "P")
+  (my/vterm--ai-launch my/claude-program "claude" new))
+
+(defun my/devin (&optional new)
+  "現在のプロジェクト(無ければ default-directory)を起点に vterm で Devin を起動。
+方式は `my/claude' と同一(vterm + bash -lc)。前置引数 NEW で別セッション。"
+  (interactive "P")
+  (my/vterm--ai-launch my/devin-program "devin" new))
+
+(defun my/codex (&optional new)
+  "現在のプロジェクト(無ければ default-directory)を起点に vterm で Codex を起動。
+方式は `my/claude' と同一(vterm + bash -lc)。前置引数 NEW で別セッション。"
+  (interactive "P")
+  (my/vterm--ai-launch my/codex-program "codex" new))
 
 ;; vterm での日本語・長文入力(mozc コンポーズバッファ)
 ;;   vterm はバッファが read-only で、マイナーモード型 IME である mozc.el は確定
