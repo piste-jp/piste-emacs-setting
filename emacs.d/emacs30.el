@@ -261,8 +261,9 @@
 
 (defun calc-point ()
     (if (eq ratina t)
-        (if (>= (x-display-pixel-width) 3000) 12 10)
-      (if (>= (x-display-pixel-width) 1900) 12 10)))
+        (if (>= (x-display-pixel-width) 3000) 16 12)
+      (if (>= (x-display-pixel-width) 3000) 16
+        (if (>= (x-display-pixel-width) 1900) 12 10))))
 
 (defun calc-width () '(width . 120) )
 (defun calc-height ()
