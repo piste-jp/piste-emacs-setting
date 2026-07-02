@@ -166,6 +166,53 @@
                     :foreground color-bg-powerline-inactive2
                     :background color-bg-powerline-inactive2)
 
+;; flycheck の mode-line lighter を Powerline の緑帯で見えるようにする
+;;
+;;   powerline-default-theme は minor-mode 帯を mode-line 顔(grey75=グレー)で
+;;   描くため、flycheck の success 顔(前景=緑)がグレー地に緑で埋もれる。success
+;;   のときだけ前景を白、背景を左から2番目のセグメント色 powerline-active1
+;;   (SpringGreen4=緑)へ差し替える。エラー時の赤(error 顔)は視認性のため残す。
+(defun my/flycheck-mode-line-whiten-success (text)
+  "flycheck lighter が success 顔(緑)なら白字・緑地へ差し替える。error(赤)等は保持。
+`flycheck-mode-line-status-text' の :filter-return advice 用。"
+  (if (and (stringp text)
+           (eq (get-text-property 0 'face text) 'success))
+      (propertize (substring-no-properties text)
+                  'face '(:foreground "white" :background "SpringGreen4"))
+    text))
+
+(with-eval-after-load 'flycheck
+  (advice-add 'flycheck-mode-line-status-text :filter-return
+              #'my/flycheck-mode-line-whiten-success))
+
+;; モードライン(powerline)のマイナーモード lighter を短縮する
+;;
+;;   powerline-default-theme は minor-mode-alist の lighter をそのまま並べる
+;;   ため、常時 ON のグローバルマイナーモードで modeline が長くなる。
+;;     例: "YAML Fly/-- Outl dtrt-indent EditorConfig WS FlyC:..."
+;;   これらは常に ON で情報価値が薄いので lighter を空にして隠す。
+;;   エラー件数を示す flycheck(FlyC:) と flyspell(Fly) は残す。
+;;   (diminish 等のパッケージ不要。minor-mode-alist を直接書き換える。)
+;;   隠したい/残したいモードは下のリストを増減するだけで調整できる。
+(defvar my/mode-line-hidden-minor-modes
+  '(outline-minor-mode
+    dtrt-indent-mode
+    editorconfig-mode
+    global-whitespace-mode
+    whitespace-mode
+    abbrev-mode)
+  "modeline から lighter を隠すマイナーモードのリスト。")
+
+(defun my/tidy-mode-line-lighters ()
+  "`my/mode-line-hidden-minor-modes' の lighter を空文字にして隠す。"
+  (dolist (mode my/mode-line-hidden-minor-modes)
+    (let ((entry (assq mode minor-mode-alist)))
+      (when entry
+        (setcdr entry (list ""))))))
+
+;; 各マイナーモードは init 途中で読み込まれるため、init 完了後に一括適用する。
+(add-hook 'emacs-startup-hook #'my/tidy-mode-line-lighters)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Which function mode
 (which-function-mode)
@@ -467,6 +514,19 @@
 (setq blink-matching-paren nil)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; 外部で書き換えられたファイルの自動再読込 (auto-revert)
+;;
+;; Claude Code 等の AI エージェントが emacs で開いている最中のファイルを直接
+;; 書き換えるため、ディスク側の変更を自動でバッファへ反映する。未保存の編集が
+;; あるバッファは auto-revert の対象外(勝手に上書きされない)なので安全。
+;; ローカルは inotify(file-notify)ベースで動くのでポーリング負荷は無い。
+(setq global-auto-revert-non-file-buffers t) ; dired 等のバッファも追従
+(setq auto-revert-verbose nil)               ; 再読込のたびのメッセージを抑制
+;; TRAMP 越し(/ssh:, /docker:)は file-notify が効かずポーリングになるため既定の
+;; まま無効(auto-revert-remote-files nil)。必要になったら t にする。
+(global-auto-revert-mode 1)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; rainbow-delimiters configuration
 (require 'rainbow-delimiters)
 ;;(add-hook 'prog-mode-hook 'rainbow-delimiters-mode)
@@ -717,6 +777,33 @@
   :config (dtrt-indent-global-mode 1))
 ;; 検出材料の無い新規ファイル用のデフォルト (既存ファイルは上2つが上書き)
 (setq-default indent-tabs-mode nil)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LTFS (aurora-ltfs) 用 C/C++ スタイル
+;;
+;; かつて c-mode-common-hook / c++-mode-hook で全 C/C++ に強制していた
+;; bsd ベース・タブ4 のスタイル。検出ベース(editorconfig/dtrt)と衝突するため
+;; グローバル強制はやめ、LTFS のソースを開いたときだけ効くようディレクトリ
+;; 限定にした。
+(with-eval-after-load 'cc-mode
+  (c-add-style
+   "ltfs"
+   '("bsd"
+     (c-basic-offset . 4)
+     (c-offsets-alist . ((case-label    . +)
+                         (comment-intro . 0)
+                         (inextern-lang . 0)
+                         (inaccess      . 0)
+                         (access-label  . -)
+                         (innamespace   . -))))))
+
+(dir-locals-set-class-variables
+ 'ltfs-cc
+ '((c-mode   . ((c-file-style . "ltfs") (indent-tabs-mode . t) (tab-width . 4)))
+   (c++-mode . ((c-file-style . "ltfs") (indent-tabs-mode . t) (tab-width . 4)))))
+
+;; LTFS ソース (aurora-ltfs)。この配下の C/C++ は bsd ベース・タブ4 で開く。
+(dir-locals-set-directory-class (expand-file-name "~/github/aurora-ltfs/") 'ltfs-cc)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Settings for spell check
@@ -1381,6 +1468,107 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
   :ensure t
   :hook ((markdown-mode org-mode) . grip-mode))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; ansible-lint を flycheck に載せる (Ansible YAML 用)
+;;
+;;   VSCode 側は redhat.ansible が同じ ansible-lint を裏で回している。Emacs でも
+;;   保存時に ansible-lint を走らせ、CI (.github/workflows/ansible-lint.yml と
+;;   同じデフォルト設定) と一致した指摘をバッファに出す。
+;;
+;;   要点:
+;;    - 出力は codeclimate(JSON)。pep8 と違い severity を持つので error/warning/
+;;      info の3段に色分けできる(重大度で分ける)。
+;;    - 実ファイルパス(source-original)に対して実行する。ansible-lint はロール
+;;      構成やリポジトリ設定を辿るため、flycheck 既定の一時コピー(source)では
+;;      正しく解析できない。ゆえに未保存バッファではなく「保存後の内容」が対象。
+;;    - 素の YAML(CI 定義など)まで走らせないよう述語で Ansible らしいパスに限定。
+;;   要 flycheck (無い環境では with-eval-after-load でまるごとスキップ)。
+
+;; codeclimate severity → flycheck level。赤(error)を減らしたい/増やしたいときは
+;; ここを書き換える。例: 実運用の指摘を全部赤にしたいなら "major" を error に。
+(defvar my/ansible-lint-severity-levels
+  '(("blocker"  . error)
+    ("critical" . error)
+    ("major"    . warning)
+    ("minor"    . info)
+    ("info"     . info))
+  "ansible-lint codeclimate の severity 文字列を flycheck のレベルへ対応付ける。")
+
+(defun my/ansible-lint-relevant-p ()
+  "現在のバッファが Ansible 対象ファイルなら non-nil。素の YAML は除外する。"
+  (when-let ((f (buffer-file-name)))
+    (or (string-match-p "/\\(roles\\|group_vars\\|host_vars\\|tasks\\|handlers\\|vars\\|defaults\\|meta\\)/" f)
+        (string-match-p "/playbook[^/]*\\.ya?ml\\'" f)
+        (string-match-p "/\\(edges\\|requirements\\|site\\|main\\)\\.ya?ml\\'" f))))
+
+(defun my/ansible-lint-parse-codeclimate (output checker buffer)
+  "ansible-lint の codeclimate(JSON)出力を flycheck-error のリストへ変換する。
+位置は positions.begin.{line,column}(列付き)か lines.begin(行のみ)の2形態を扱う。"
+  ;; flycheck は stderr を stdout に混ぜてパーサへ渡すことがある。ansible-lint は
+  ;; サマリ("# Rule Violation Summary" 等)や警告を stderr に出すため、出力全体を
+  ;; そのまま json-parse-string にかけると先頭の非 JSON でパースが落ち、「指摘0件」
+  ;; と誤判定されてflycheckが生出力をミニバッファへダンプする。
+  ;;
+  ;; codeclimate 本体は指摘があれば必ず行頭 '[{' の単一行(空配列なら '[]')。
+  ;; ただし '[DEPRECATION WARNING]:' や '[WARNING]' 等のノイズ行も '[' 始まりで、
+  ;; 素朴に "^\[" で拾うとこれらを掴んで json-parse-string が落ち、指摘があるのに
+  ;; 「0件」と誤判定してしまう(exit 2 なのに flycheck が生出力をダンプする)。
+  ;; そこで JSON の弁別子である '[{'…']' の行だけを取り出す(空配列=指摘なしは
+  ;; 拾えなくてよい)。
+  (let* ((json (if (string-match "^\\(\\[{.*\\]\\)$" output)
+                   (match-string 1 output)
+                 "[]"))
+         (issues (condition-case nil
+                     (json-parse-string json :object-type 'alist :array-type 'list)
+                   (error nil)))      ; 空出力やパース失敗は「指摘なし」扱い
+         errors)
+    (dolist (issue issues)
+      (let* ((check (alist-get 'check_name issue))
+             (desc  (alist-get 'description issue))
+             (sev   (alist-get 'severity issue))
+             (loc   (alist-get 'location issue))
+             (positions (alist-get 'positions loc))
+             line column)
+        (if positions
+            (let ((begin (alist-get 'begin positions)))
+              (setq line   (alist-get 'line begin)
+                    column (alist-get 'column begin)))
+          ;; lines.begin は素の数値(列情報なし)
+          (setq line (alist-get 'begin (alist-get 'lines loc))))
+        (when line
+          (push (flycheck-error-new-at
+                 line column
+                 (or (cdr (assoc sev my/ansible-lint-severity-levels)) 'warning)
+                 (format "%s" desc)
+                 :id check
+                 :checker checker
+                 :buffer buffer)
+                errors))))
+    (nreverse errors)))
+
+(defun my/enable-ansible-flycheck ()
+  "Ansible の YAML を開いたら flycheck(ansible-lint)を有効化する。
+flycheck が導入済みのときだけ動く(require の失敗は握りつぶす)。"
+  (when (and (my/ansible-lint-relevant-p)
+             (require 'flycheck nil t))
+    (flycheck-mode 1)))
+
+(with-eval-after-load 'flycheck
+  (flycheck-define-checker ansible-lint
+    "ansible-lint による Ansible 静的解析チェッカー (codeclimate/JSON, 重大度別)。"
+    :command ("ansible-lint"
+              "--offline"          ; バージョン確認バナー(出力を汚す)と毎保存の通信を抑止
+              "--nocolor"          ; NO_COLOR=1 相当。念のため色を無効化
+              "-f" "codeclimate"   ; severity 付き JSON
+              source-original)     ; 実ファイルに対して実行(要保存)
+    :error-parser my/ansible-lint-parse-codeclimate
+    :modes (yaml-mode yaml-ts-mode)
+    :predicate my/ansible-lint-relevant-p)
+  (add-to-list 'flycheck-checkers 'ansible-lint))
+
+(add-hook 'yaml-mode-hook    #'my/enable-ansible-flycheck)
+(add-hook 'yaml-ts-mode-hook #'my/enable-ansible-flycheck)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; vterm + Claude Code / Devin CLI ランチャ
 ;;
@@ -1420,14 +1608,18 @@ This is particularly useful under Mac OSX, where GUI apps are not started from a
   ;; bash -lc(ログインシェル)が nvm を読み込むので PATH でそのまま見つかる。
   "Codex CLI を起動するコマンド。引数を含めてもよい。")
 
+(defun my/project-root-or-default ()
+  "現在のプロジェクトのルートを返す(プロジェクト外なら default-directory)。"
+  (or (and (fboundp 'project-current)
+           (let ((pr (project-current nil)))
+             (and pr (project-root pr))))
+      default-directory))
+
 (defun my/vterm--ai-launch (program label &optional new)
   "PROGRAM を vterm で起動する共通部。バッファ名のラベルは LABEL。
 起点は現在のプロジェクト(無ければ default-directory)。NEW で別セッション。"
   (require 'vterm)
-  (let* ((root (or (and (fboundp 'project-current)
-                        (let ((pr (project-current nil)))
-                          (and pr (project-root pr))))
-                   default-directory))
+  (let* ((root (my/project-root-or-default))
          (default-directory root)
          (host (or (file-remote-p root 'host) "local"))
          (vterm-shell (concat "bash -lc "
@@ -1458,6 +1650,73 @@ TRAMP より `docker exec' 直結が安定なので `my/openpilot-claude' を使
 方式は `my/claude' と同一(vterm + bash -lc)。前置引数 NEW で別セッション。"
   (interactive "P")
   (my/vterm--ai-launch my/codex-program "codex" new))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; dev container を「正規CLI」(@devcontainers/cli)で扱う — プロジェクト汎用
+;;   VSCode を使わずに devcontainer のライフサイクルを回す。`devcontainer up' は
+;;   initializeCommand → compose/docker up → features/postCreate/postStart まで
+;;   実行する。カレントプロジェクト直下の devcontainer.json を自動検出し、複数
+;;   ある場合(.devcontainer/<name>/devcontainer.json)は completing-read で選ぶ。
+;;   要: npm i -g @devcontainers/cli (nvm なので sudo 不要)。
+;;   プロジェクト固定のラッパ(パス・設定を決め打ちしてどこからでも呼ぶ)は
+;;   personal.el 側に置く。
+(defun my/devcontainer--configs (root)
+  "ROOT 配下の devcontainer 設定ファイル(ROOT からの相対パス)を列挙する。
+探索順: .devcontainer/devcontainer.json → .devcontainer.json →
+.devcontainer/<name>/devcontainer.json (CLI の探索仕様と同じ場所)。"
+  (let ((dcdir (expand-file-name ".devcontainer" root))
+        cands)
+    (dolist (f '(".devcontainer/devcontainer.json" ".devcontainer.json"))
+      (when (file-exists-p (expand-file-name f root))
+        (push f cands)))
+    (when (file-directory-p dcdir)
+      (dolist (d (directory-files dcdir nil "\\`[^.]"))
+        (let ((f (format ".devcontainer/%s/devcontainer.json" d)))
+          (when (file-exists-p (expand-file-name f root))
+            (push f cands)))))
+    (nreverse cands)))
+
+(defun my/devcontainer--read-config (root)
+  "ROOT の devcontainer 設定を1つ返す。複数候補があれば選択を求める。"
+  (let ((cands (my/devcontainer--configs root)))
+    (cond ((null cands)
+           (user-error "devcontainer.json が見つかりません: %s" root))
+          ((null (cdr cands)) (car cands))
+          (t (completing-read "devcontainer config: " cands nil t)))))
+
+(defun my/devcontainer-up (&optional config)
+  "カレントプロジェクトの dev container を正規手順で起動する(非同期)。
+CONFIG(プロジェクトルートからの相対パス)を省略すると自動検出し、複数候補が
+あれば選択を求める。"
+  (interactive)
+  (let* ((root (my/project-root-or-default))
+         (config (or config (my/devcontainer--read-config root)))
+         (default-directory root)
+         (name (file-name-nondirectory (directory-file-name root)))
+         (buf (get-buffer-create (format "*devcontainer:%s*" name))))
+    (display-buffer buf)
+    (make-process
+     :name (format "devcontainer-up-%s" name)
+     :buffer buf
+     :command (list "devcontainer" "up"
+                    "--workspace-folder" "."
+                    "--config" config)
+     :sentinel (lambda (_p e)
+                 (message "devcontainer up(%s): %s" name (string-trim e))))))
+
+(defun my/devcontainer-shell (&optional config)
+  "カレントプロジェクトの dev container 内に vterm シェルを開く(正規 exec)。
+CONFIG の扱いは `my/devcontainer-up' と同じ。"
+  (interactive)
+  (require 'vterm)
+  (let* ((root (my/project-root-or-default))
+         (config (or config (my/devcontainer--read-config root)))
+         (default-directory root)
+         (name (file-name-nondirectory (directory-file-name root)))
+         (vterm-shell (format "devcontainer exec --workspace-folder . --config %s bash"
+                              (shell-quote-argument config)))
+         (vterm-buffer-name (format "*dc-shell:%s*" name)))
+    (vterm vterm-buffer-name)))
 
 ;; vterm での日本語・長文入力(mozc コンポーズバッファ)
 ;;   vterm はバッファが read-only で、マイナーモード型 IME である mozc.el は確定

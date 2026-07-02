@@ -52,12 +52,20 @@ VSCode 不要で devcontainer のライフサイクルを回す。要 `npm i -g 
 
 | 操作 | コマンド |
 |---|---|
-| 正規手順で起動（host_setup→compose up→postCreate/postStart） | `M-x my/openpilot-devcontainer-up` |
-| コンテナ内に vterm シェル（devcontainer exec） | `M-x my/openpilot-devcontainer-shell` |
-| ワークスペースを dired で開く（/docker: TRAMP）＋gtags 用意 | `M-x my/openpilot-open` |
+| カレントプロジェクトの dev container を起動 | `M-x my/devcontainer-up` |
+| カレントプロジェクトのコンテナ内に vterm シェル（devcontainer exec） | `M-x my/devcontainer-shell` |
+| openpilot を（プロジェクト外からでも）起動 | `M-x my/openpilot-devcontainer-up` |
+| openpilot のコンテナ内に vterm シェル | `M-x my/openpilot-devcontainer-shell` |
+| openpilot のワークスペースを dired で開く（/docker: TRAMP）＋gtags 用意 | `M-x my/openpilot-open` |
 
-- 設定切替: `my/openpilot-devcontainer-config`（既定 openpilot。UI は `.devcontainer/openpilot-ui/devcontainer.json`）
-- `my/openpilot-devcontainer-up` は手動 `docker start` では抜ける `.env`(BASE_COMMIT) や Xauthority も正しく整える。
+- `my/devcontainer-up` / `my/devcontainer-shell` は汎用（公開側 emacs2X.el）。プロジェクトルートの
+  `devcontainer.json`（`.devcontainer/devcontainer.json` / `.devcontainer.json` /
+  `.devcontainer/<name>/devcontainer.json`）を自動検出し、複数あれば選択を求める
+  （例: aurora-ltfs の rocky9 / ubuntu2404、openpilot の openpilot / openpilot-ui）。
+- openpilot 用ラッパ（personal.el）はパスと設定を決め打ちしただけ。設定切替は
+  `my/openpilot-devcontainer-config`（既定 openpilot。UI は `.devcontainer/openpilot-ui/devcontainer.json`）
+- `devcontainer up` は initializeCommand も走るので、openpilot では手動 `docker start` で抜ける
+  `.env`(BASE_COMMIT) や Xauthority も正しく整う。
 
 ---
 
