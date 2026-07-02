@@ -1660,11 +1660,29 @@ TRAMP より `docker exec' 直結が安定なので `my/openpilot-claude' を使
           ((null (cdr cands)) (car cands))
           (t (completing-read "devcontainer config: " cands nil t)))))
 
+(defun my/devcontainer--insert-filter (proc string)
+  "プロセス出力を整形してバッファへ追記するフィルタ。
+ANSI 色は描画し、\\r\\n は普通の改行に、行内の裸の CR(^M)は「行頭へ戻って
+上書き」の意味なので CR までの古い内容を捨てて最後の描画だけを残す。"
+  (let ((buf (process-buffer proc)))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (let* ((moving (= (point) (process-mark proc)))
+               (clean (replace-regexp-in-string
+                       "[^\n]*\r" ""
+                       (replace-regexp-in-string "\r\n" "\n" string))))
+          (save-excursion
+            (goto-char (process-mark proc))
+            (insert (ansi-color-apply clean))
+            (set-marker (process-mark proc) (point)))
+          (when moving (goto-char (process-mark proc))))))))
+
 (defun my/devcontainer-up (&optional config)
   "カレントプロジェクトの dev container を正規手順で起動する(非同期)。
 CONFIG(プロジェクトルートからの相対パス)を省略すると自動検出し、複数候補が
 あれば選択を求める。"
   (interactive)
+  (require 'ansi-color)
   (let* ((root (my/project-root-or-default))
          (config (or config (my/devcontainer--read-config root)))
          (default-directory root)
@@ -1674,11 +1692,20 @@ CONFIG(プロジェクトルートからの相対パス)を省略すると自動
     (make-process
      :name (format "devcontainer-up-%s" name)
      :buffer buf
+     ;; pty だと docker pull 等が TTY 向けのカーソル制御(ESC[1A/[2K)や
+     ;; プログレスバーを吐き、普通のバッファでは制御文字まみれになる。
+     ;; pipe なら非 TTY を検出して行単位のプレーンなログに切り替わる。
+     :connection-type 'pipe
+     ;; 残った SGR 色コードは ansi-color で描画する
+     :filter #'my/devcontainer--insert-filter
      :command (list "devcontainer" "up"
                     "--workspace-folder" "."
                     "--config" config)
-     :sentinel (lambda (_p e)
-                 (message "devcontainer up(%s): %s" name (string-trim e))))))
+     ;; このファイルは lexical-binding でない(動的スコープ)ため、ラムダは
+     ;; ローカル変数(name 等)を捕捉できない。sentinel が走る頃には束縛が
+     ;; 消えて void-variable になるので、必要な情報はプロセス名から取る。
+     :sentinel (lambda (p e)
+                 (message "%s: %s" (process-name p) (string-trim e))))))
 
 (defun my/devcontainer-shell (&optional config)
   "カレントプロジェクトの dev container 内に vterm シェルを開く(正規 exec)。
