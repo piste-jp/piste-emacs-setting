@@ -35,7 +35,7 @@ openpilot を emacs で扱うためのセットアップの使い方まとめ。
 
 vterm は read-only で mozc.el を inline 直接入力できない（構造的制約）。代わりにコンポーズバッファを使う:
 
-1. vterm バッファで **`C-c C-j`** または **`s-SPC`** → `*vterm-compose*` が開く（mozc 自動 ON）
+1. vterm バッファで **`C-c C-j`** または **`s-SPC`** → その vterm の直下に `*vterm-compose*` が開く（mozc 自動 ON。マルチウィンドウでも位置固定）
 2. 普通の編集バッファなので **mozc inline・複数行・長文** で自由に書く（`s-SPC` で和英切替）
 3. **`C-c C-c`** で全文を claude へ bracketed paste 送信（改行で勝手に確定しない）。元の vterm に戻る
 4. 内容を確認して **RET** で claude に実行（破棄は **`C-c C-k`**）
