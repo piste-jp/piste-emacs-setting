@@ -2,7 +2,7 @@
 ;; Emacs26 Setting File
 ;;                  Written by Atsushi Abe
 ;;
-;; +DATE: 2025/11/26 15:01:14 piste
+;; +DATE: 2026/07/02 16:17:59 piste
 ;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -254,8 +254,8 @@
 
 (defun calc-point ()
     (if (eq ratina t)
-        (if (>= (x-display-pixel-width) 3000) 12 10)
-      (if (>= (x-display-pixel-width) 1900) 12 10)))
+        (if (>= (x-display-pixel-width) 3000) 14 10) ;; For Ratina, 14pt or 10pt
+      (if (>= (x-display-pixel-width) 1900) 11 9))) ;; Default,    11pt or 9pt
 
 (defun calc-width () '(width . 120) )
 (defun calc-height ()
@@ -306,7 +306,7 @@
                    (let* ((font-family "DejaVuSansM Nerd Font Mono")
                           (jp-font-family "PlemolJP Console NF")
                           (font-size (calc-point))
-                          (font-height (* font-size (calc-point)) )
+                          (font-height (* font-size 10) ) ;; :height は 1/10pt 単位
                           )
                      (set-face-attribute 'default nil :family font-family :height font-height)
                      (let ((name (frame-parameter nil 'font))
@@ -338,7 +338,7 @@
                  (let* ((font-family "DejaVuSansM Nerd Font Mono")
                         (jp-font-family "PlemolJP Console NF")
                         (font-size (calc-point))
-                        (font-height (* font-size (calc-point)) )
+                        (font-height (* font-size 10) ) ;; :height は 1/10pt 単位
                         )
                    (set-face-attribute 'default nil :family font-family :height font-height)
                    (let ((name (frame-parameter nil 'font))

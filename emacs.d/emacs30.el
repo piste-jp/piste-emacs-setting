@@ -307,7 +307,7 @@
                    (let* ((font-family "DejaVuSansM Nerd Font Mono")
                           (jp-font-family "PlemolJP Console NF")
                           (font-size (calc-point))
-                          (font-height (* font-size (calc-point)) )
+                          (font-height (* font-size 10) ) ;; :height は 1/10pt 単位
                           )
                      (set-face-attribute 'default nil :family font-family :height font-height)
                      (let ((name (frame-parameter nil 'font))
@@ -339,7 +339,7 @@
                  (let* ((font-family "DejaVuSansM Nerd Font Mono")
                         (jp-font-family "PlemolJP Console NF")
                         (font-size (calc-point))
-                        (font-height (* font-size (calc-point)) )
+                        (font-height (* font-size 10) ) ;; :height は 1/10pt 単位
                         )
                    (set-face-attribute 'default nil :family font-family :height font-height)
                    (let ((name (frame-parameter nil 'font))
